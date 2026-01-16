@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Examen Monitorizado - Alta Seguridad</title>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: sans-serif;
+            background: #000;
+        }
+
+        /* PANTALLA DE BIENVENIDA */
+        #welcome-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: white;
+            text-align: center;
+        }
+
+        .btn-start {
+            padding: 15px 50px;
+            font-size: 1.2rem;
+            background: #00d2ff;
+            color: #000;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 20px rgba(0, 210, 255, 0.5);
+            transition: transform 0.2s;
+        }
+
+        .btn-start:hover {
+            transform: scale(1.05);
+        }
+
+        /* CONTENEDOR EXAMEN (IFRAME) */
+        #exam-container {
+            width: 100%;
+            height: 100vh;
+            display: none;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        /* INTERFAZ MINIATURA FLOTANTE */
+        #monitor-overlay {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 120px;
+            height: auto;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 10px;
+            padding: 5px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            display: none;
+            z-index: 5000;
+            border: 2px solid #00ff00;
+            /* Borde verde indica todo OK */
+            transition: border-color 0.3s;
+        }
+
+        #video-preview {
+            width: 100%;
+            height: 90px;
+            background: #000;
+            border-radius: 5px;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        #status-text {
+            color: white;
+            font-size: 10px;
+            text-align: center;
+            margin-top: 2px;
+            font-weight: bold;
+        }
+
+        /* PANTALLA DE BLOQUEO (MUERTE SÚBITA) */
+        #lock-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #8b0000;
+            color: white;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #lock-screen h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        #lock-screen p {
+            font-size: 1.5rem;
+        }
+
+        .reason-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border: 1px solid #ff5555;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="welcome-screen">
+        <h1>Control de Seguridad 3.0</h1>
+        <ul style="text-align: left; margin-bottom: 30px; font-size: 0.9rem; color: #ddd;">
+            <li>✅ Se activará Cámara y Micrófono.</li>
+            <li>🚫 Prohibido salir de pantalla completa.</li>
+            <li>🚫 Prohibido dividir pantalla.</li>
+            <li>🚫 Prohibido cambiar de pestaña.</li>
+        </ul>
+        <button class="btn-start" onclick="iniciarSistema()">ENTRAR AL EXAMEN</button>
+    </div>
+
+    <div id="lock-screen">
+        <h1>EXAMEN CANCELADO</h1>
+        <p>Has violado las normas de seguridad.</p>
+        <div class="reason-box">Motivo: <span id="fail-reason">Actividad sospechosa</span></div>
+        <p style="margin-top: 30px; font-size: 1rem;">Cierra esta ventana y contacta a tu profesor.</p>
+    </div>
+
+    <div id="exam-container">
+        <iframe
+            src="https://docs.google.com/forms/d/e/1FAIpQLSfMK78HfJuof_1YAwGuJMUHs1jOJpvCnSrQ8TdW4RZPMoQZWA/viewform?embedded=true"></iframe>
+    </div>
+
+    <div id="monitor-overlay">
+        <video id="video-preview" autoplay playsinline muted></video>
+        <div id="status-text">MONITOREANDO</div>
+    </div>
+
+    <script>
+        let model = null;
+        let isExamActive = false;
+        let originalWidth = window.innerWidth;
+
+        const video = document.getElementById('video-preview');
+        const overlay = document.getElementById('monitor-overlay');
+
+        async function iniciarSistema() {
+            try {
+                // 1. Solicitar permisos (Video ligero + Audio)
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 320, height: 240, frameRate: 15 },
+                    audio: true
+                });
+                video.srcObject = stream;
+
+                // 2. Feedback de carga
+                Swal.fire({
+                    title: 'Activando IA...',
+                    text: 'Esto puede tardar unos segundos según tu conexión.',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading() }
+                });
+
+                // 3. Cargar TensorFlow
+                if (!window.blazeface) {
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                model = await blazeface.load();
+
+                // 4. Iniciar Examen
+                Swal.close();
+                document.getElementById('welcome-screen').style.display = 'none';
+                document.getElementById('exam-container').style.display = 'block';
+                overlay.style.display = 'block';
+                isExamActive = true;
+
+                vigilarRostro();
+                activarTrampas();
+
+            } catch (err) {
+                console.error(err);
+                Swal.fire('Error de Hardware', 'No se detectó cámara o micrófono. O los permisos fueron denegados.', 'error');
+            }
+        }
+
+        // --- SISTEMA DE VIGILANCIA (IA) ---
+        async function vigilarRostro() {
+            if (!isExamActive) return;
+
+            try {
+                const predictions = await model.estimateFaces(video, false);
+
+                if (predictions.length > 0) {
+                    overlay.style.borderColor = "#00ff00"; // Verde: OK
+                } else {
+                    overlay.style.borderColor = "#ff0000"; // Rojo: No te veo
+                }
+            } catch (e) {
+                console.log("IA procesando...");
+            }
+
+            setTimeout(vigilarRostro, 1000);
+        }
+
+        // --- TRAMPAS Y SEGURIDAD ---
+        function activarTrampas() {
+
+            // 1. Cambio de Pestaña / Minimizar
+            document.addEventListener("visibilitychange", () => {
+                if (document.hidden && isExamActive) {
+                    cancelarExamen("Cambio de pestaña o minimizado");
+                }
+            });
+
+            // 2. Perder el foco (Clic fuera del iframe)
+            window.addEventListener("blur", () => {
+                setTimeout(() => {
+                    if (document.activeElement.tagName === "IFRAME") return;
+                    if (isExamActive) cancelarExamen("Salida del área de examen");
+                }, 500);
+            });
+
+            // 3. Pantalla Dividida
+            window.addEventListener("resize", () => {
+                if (!isExamActive) return;
+                if (window.innerWidth < (originalWidth * 0.8)) {
+                    cancelarExamen("Uso de Pantalla Dividida detectado");
+                }
+            });
+        }
+
+        function cancelarExamen(motivo) {
+            isExamActive = false;
+
+            const stream = video.srcObject;
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+            }
+
+            document.getElementById('fail-reason').innerText = motivo;
+            document.getElementById('lock-screen').style.display = 'flex';
+            document.getElementById('exam-container').style.display = 'none';
+            overlay.style.display = 'none';
+
+            try {
+                document.documentElement.requestFullscreen();
+            } catch (e) { }
+        }
+    </script>
+</body>
+
+</html> 
