@@ -207,8 +207,10 @@
                 });
 
                 // 3. Cargar TensorFlow
-                if (!window.blazeface) {
-                    await new Promise(r => setTimeout(r, 1000));
+                let checks = 0;
+                while (!window.blazeface && checks < 100) {
+                    await new Promise(r => setTimeout(r, 100));
+                    checks++;
                 }
                 model = await blazeface.load();
 
