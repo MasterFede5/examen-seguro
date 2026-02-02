@@ -188,6 +188,9 @@
 
         const video = document.getElementById('video-preview');
         const overlay = document.getElementById('monitor-overlay');
+        const failReason = document.getElementById('fail-reason');
+        const lockScreen = document.getElementById('lock-screen');
+        const examContainer = document.getElementById('exam-container');
 
         async function iniciarSistema() {
             try {
@@ -283,9 +286,9 @@
                 tracks.forEach(track => track.stop());
             }
 
-            document.getElementById('fail-reason').innerText = motivo;
-            document.getElementById('lock-screen').style.display = 'flex';
-            document.getElementById('exam-container').style.display = 'none';
+            failReason.innerText = motivo;
+            lockScreen.style.display = 'flex';
+            examContainer.style.display = 'none';
             overlay.style.display = 'none';
 
             try {
