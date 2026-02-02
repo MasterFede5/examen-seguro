@@ -173,6 +173,15 @@
     </div>
 
     <script>
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), wait);
+            };
+        }
+
         let model = null;
         let isExamActive = false;
         let originalWidth = window.innerWidth;
@@ -257,12 +266,12 @@
             });
 
             // 3. Pantalla Dividida
-            window.addEventListener("resize", () => {
+            window.addEventListener("resize", debounce(() => {
                 if (!isExamActive) return;
                 if (window.innerWidth < (originalWidth * 0.8)) {
                     cancelarExamen("Uso de Pantalla Dividida detectado");
                 }
-            });
+            }, 250));
         }
 
         function cancelarExamen(motivo) {
